@@ -2,7 +2,7 @@
  Plugin: Runkeeper
  Description: Gets recent runkeeper data
  Author: Alan Schussman
- 
+
  Notes:
    To run this plugin you need a Runkeeper API app ID and secret key, plus a user access_token that gets specified in the config. Some instructions for starting up with the Runkeeper API are at https://gist.github.com/ats/5538092. Structure is based heavily on Patrice Brend'amour's fitbit plugin. Provide a filename in runkeeper_save_dat_file to optionally dump the retrieved activity data into a tab-separated text file for playing with later.
  Configuration:
@@ -33,7 +33,7 @@ class RunkeeperLogger < Slogger
     def do_log
         if @config.key?(self.class.name)
             config = @config[self.class.name]
-            
+
             # Check that the user has configured the plugin
             if config['runkeeper_access_token'] == ""
                 @log.warn("Runkeeper has not been configured; you need a developer API key to create a user access_token.")
@@ -43,12 +43,12 @@ class RunkeeperLogger < Slogger
             @log.warn("Runkeeper has not been configured; please edit your slogger_config file.")
             return
         end
-                
+
         rk_token = config['runkeeper_access_token']
         save_data_file = config['runkeeper_save_data_file']
         metric_value = config['metric_distance']
         developMode = $options[:develop]
-        
+
 
         # get activities array:
         #   This is currently limited and get the most recent 25 entries,
@@ -57,7 +57,7 @@ class RunkeeperLogger < Slogger
 
         activitiesReq = sprintf('curl https://api.runkeeper.com/fitnessActivities -s -X GET -H "Authorization: Bearer %s"', rk_token)
         activities = JSON.parse(`#{activitiesReq}`)
-        
+
         # ============================================================
         # iterate over the days and create entries
         # All based on the fitbit plugin
@@ -66,10 +66,12 @@ class RunkeeperLogger < Slogger
         until $i >= days  do
             currentDate = Time.now - ((60 * 60 * 24) * $i)
             timestring = currentDate.strftime('%F')
-            
+
             @log.info("Logging Runkeeper summary for #{timestring}")
-            
+
             output = ""
+            total_daily_cal = 0
+            total_workout = 0
             activities["items"].each do | activity |
               if Date.parse(activity["start_time"]).to_s == timestring   # activity is in date range
                 activityReq = sprintf('curl https://api.runkeeper.com%s -s -X GET -H "Authorization: Bearer %s"', activity["uri"], rk_token)
@@ -80,10 +82,20 @@ class RunkeeperLogger < Slogger
                 else
                     distance = (active["total_distance"]/10).round / 100.0
                 end
+
+                if type == "Other"
+                    type = "FitStar Workout"
+                end
+                distance_mi = (active["total_distance"]/1609.34*100).round / 100.0
+                distance_km = (active["total_distance"]/10).round / 100.0
+                duration_min = ((active["duration"]) / 60).round
+                duration_sec = ((active["duration"]) % 60).round
+
                 duration = (active["duration"]/60*100).round / 100
                 time = active["start_time"]
                 notes = active["notes"]
                 equipment = active["equipment"]
+                calories = (active["total_calories"]).round
                 if developMode
                   @log.info
                   @log.info("#{type}")
@@ -93,32 +105,51 @@ class RunkeeperLogger < Slogger
                   @log.info("#{notes}")
                   @log.info("#{equipment}")
                 end
-                output = output + "\n\n### Activity: #{type}\n* **Time**: #{time}\n"
-                if(!metric_value)
-                    output = output + "* **Distance**: #{distance} miles\n"
-                else
-                    output = output + "* **Distance**: #{distance} kilometers\n"
+                output = output + "\n### Activity: #{type}\n* **Time**: #{time}\n"
+                # if(!metric_value)
+                #     output = output + "* **Distance**: #{distance} miles\n"
+                # else
+                #     output = output + "* **Distance**: #{distance} kilometers\n"
+                # end
+
+                output = output + "* **Distance**: #{distance_mi} miles (#{distance_km} kilometers)\n" unless distance_mi == 0.0
+                #output = output + "* **Duration**: #{duration_min} minutes #{duration_sec} seconds\n"
+                if duration_min != 0
+                    output = output + "* **Duration**: #{duration_min} minutes"
+                    if duration_sec != 0
+                        output = output + " #{duration_sec} seconds\n"
+                    else
+                        output = output + "\n"
+                    end
+                elsif duration_sec != 0
+                    output = output + "* **Duration**: #{duration_sec} seconds\n"
                 end
-                output = output + "* **Duration**: #{duration} minutes\n"
+                output = output + "* **Calories**: #{calories} cal\n" unless calories.nil?
                 output = output + "* **Equipment**: #{equipment}\n" unless equipment == "None"
                 output = output + "* **Notes**: #{notes}\n" unless notes.nil?
-                
+                total_daily_cal = total_daily_cal + calories unless calories.nil?
+                total_workout = total_workout + 1
                 # save to text file if desired for stats and stuff
                 if save_data_file != ""
                   open(save_data_file, 'a') { |f|
-                    f.puts("#{type}\t#{distance}\t#{duration}\t#{time}\t#{equipment}")
+                    f.puts("#{type}\t#{distance}\t#{duration}\t#{time}\t#{equipment}\t#{calories}\t#{notes}")
                   }
                 end
               end
             end
+
+            if total_workout > 1
+                output = output + "\n### Total Daily Calories: #{total_daily_cal} cal\n"
+            end
+
             # Create a journal entry
             tags = config['runkeeper_tags'] || ''
-            tags = "\n\n#{tags}\n" unless tags == ''
+            tags = "\n#{tags}\n" unless tags == ''
 
             options = {}
-            options['content'] = "## Workouts and Exercise\n\n#{output}#{tags}"
+            options['content'] = "## Workouts and Exercise\n#{output}#{tags}"
             options['datestamp'] = currentDate.utc.iso8601
-            
+
             sl = DayOne.new
             sl.to_dayone(options) unless output == ""
 
