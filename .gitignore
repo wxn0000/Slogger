@@ -13,3 +13,4 @@ bintest
 .fuse*
 .bundle
 vendor/bundle
+data/runkeeper.txt
