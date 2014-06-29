@@ -11,6 +11,7 @@ runlog.txt
 projectnotes.md
 bintest
 .fuse*
+Gemfile.lock
 .bundle
 vendor/bundle
 data/runkeeper.txt
