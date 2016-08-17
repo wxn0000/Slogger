@@ -66,6 +66,7 @@ class GithubLogger < Slogger
         case action['type']
           when "PushEvent"
             if !action["repo"]
+<<<<<<< HEAD
               action['repo'] = {"name" => "unknown repository"}
             end
             output += "* Pushed to branch *#{action['payload']['ref'].gsub(/refs\/heads\//,'')}* of [#{action['repo']['name']}](#{action['repo']['url']})\n"
@@ -83,11 +84,22 @@ class GithubLogger < Slogger
           when "ForkEvent"
             if !action["repo"]
                 action['repo'] = {"name" => "unknown repository"}
+=======
+              action['repo'] = {"name" => "unknown repo"}
+            end
+            output += "* Pushed to branch *#{action['payload']['ref'].gsub(/refs\/heads\//,'')}* of [#{action['repo']['name']}](#{action['url']})\n"
+            action['payload']['commits'].each do |commits|
+              output += "    * #{commits["message"]}\n"
+>>>>>>> 4b37b60781c88dc83e3ec32cd0d290c83ee9bec5
             end
             output += "* Forked [#{action['repo']['name']}](#{action['repo']['url']})\n"
           when "WatchEvent"
             if action['payload']['action'] == "started"
+<<<<<<< HEAD
               output += "* Started watching [#{action['repo']['name']}](#{action['repo']['url']})\n"
+=======
+              output += "* Started watching [#{action['repo']['owner']}/#{action['repo']['name']}](#{action['repo']['url']})\n"
+>>>>>>> 4b37b60781c88dc83e3ec32cd0d290c83ee9bec5
               output += "    * #{action['repo']['description'].gsub(/\n/," ")}\n" unless action['repo']['description'].nil?
             end
         end
